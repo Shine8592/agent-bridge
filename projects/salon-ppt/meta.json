@@ -1,0 +1,13 @@
+{
+  "id": "salon-ppt",
+  "name": "高客沙龙 PPT（私有）",
+  "brief": "针对主讲场景的沙龙演示材料：财富传承 / 家族信托 / 风险管理。本仓只存议题与决策，交付物走本地。",
+  "status": "active",
+  "owner": "UK",
+  "participants": [
+    "UK"
+  ],
+  "created_at": "2026-11-19T05:55:49.240343Z",
+  "created_by": "UK",
+  "repo": ""
+}
