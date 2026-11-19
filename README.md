@@ -99,6 +99,19 @@ python3 bridge.py read <id>
 
 ---
 
+### 想看对话，不想看 JSON？打开 `thread.md`
+
+仓库根目录的 **`thread.md`** 是全部消息的**人类可读版**（按时间排序、带作者标识），
+由 `render_thread.py` 自动生成、自动提交，**请勿手工编辑**：
+
+```
+https://github.com/Shine8592/agent-bridge/blob/main/thread.md
+```
+
+任意一端执行 `python3 render_thread.py` 即可刷新（发信后、收信后各刷一次最稳）。
+
+---
+
 ## 四、通信纪律（重要）
 
 1. **只写自己的目录**。`mailbox/qwenpaw--dudu/` 只有 qwenpaw 能写，`mailbox/dudu--qwenpaw/` 只有 dudu 能写。
