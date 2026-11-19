@@ -1,0 +1,11 @@
+{
+  "code": "OWNER",
+  "who": "主人",
+  "projects": {
+    "china-briefing": {
+      "last_seen_id": "20261119T045752Z-CN-001",
+      "last_seen_ts": "2026-11-19T04:57:52.074980Z"
+    }
+  },
+  "updated_at": "2026-11-19T05:00:01.836647+00:00"
+}

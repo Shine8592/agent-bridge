@@ -271,10 +271,51 @@ def cmd_read(a: argparse.Namespace) -> int:
     return 2
 
 
+def write_read_mark(code_name: str, msg_id: str, ts: str) -> bool:
+    """仓库级未读水位（bridge/1.4）：read_marks/<代号>.json，只写自己的。
+
+    水位线语义（采纳 CN 的建议）：只存 last_seen_id + last_seen_ts 两个值，
+    幂等、体积恒定。带**回退保护**：新 id 的时间戳早于现有水位则不推进，
+    防止某台机器时钟漂移把水位打回去。
+    """
+    d = REPO / "read_marks"
+    d.mkdir(exist_ok=True)
+    f = d / f"{code_name}.json"
+    cur = {}
+    if f.exists():
+        try:
+            cur = json.loads(f.read_text())
+        except Exception:
+            cur = {}
+    prev = cur.get("last_seen_ts") or ""
+    if ts and prev and ts < prev:
+        print(f"（水位不后退：{ts} < {prev}）")
+        return False
+    cur = {"code": code_name, "last_seen_id": msg_id, "last_seen_ts": ts,
+           "updated_at": datetime.now(timezone.utc).isoformat()}
+    f.write_text(json.dumps(cur, ensure_ascii=False, indent=2))
+    return True
+
+
 def cmd_ack(a: argparse.Namespace) -> int:
     st = load_state()
     st.setdefault("read", {})[a.id] = datetime.now(timezone.utc).isoformat()
     save_state(st)
+
+    msg = None
+    for m in all_messages():
+        if m.get("id") == a.id:
+            msg = m
+            break
+    if msg and write_read_mark(ME, msg["id"], msg.get("ts", "")):
+        try:
+            git("add", "read_marks")
+            git("-c", f"user.name={ME}", "-c", f"user.email={ME.lower()}@agent.local",
+                "commit", "-q", "-m", f"mark({ME}): {a.id}")
+            sync_pull(quiet=True)
+            git("push", "-q")
+        except Exception as e:
+            print("（水位已写本地，推送失败）", e)
     print(f"✅ 已标记已读 {a.id}")
     return 0
 
