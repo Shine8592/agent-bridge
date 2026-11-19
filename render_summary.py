@@ -165,7 +165,7 @@ def main() -> int:
         out = REPO / "projects" / pid / "summary.md"
         out.write_text(build(pid))
         print(f"  ✅ {pid:22s} summary.md {len(out.read_text())} 字节")
-    subprocess.run(["git", "add", "-A"], cwd=REPO, check=False)
+    subprocess.run(["git", "add", "projects/*/summary.md"], cwd=REPO, check=False)
     r = subprocess.run(["git", "-c", "user.name=" + ME, "-c", "user.email=uk@agent.local",
                         "commit", "-q", "-m", "docs: 按决议第6条生成各项目 summary.md"],
                        cwd=REPO, capture_output=True, text=True)

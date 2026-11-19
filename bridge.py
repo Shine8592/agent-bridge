@@ -39,6 +39,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -84,12 +85,64 @@ def git(*args: str, check: bool = True) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(REPO), *args], capture_output=True, text=True, check=check)
 
 
+def report_fail(source: str, error: str, impact: str = "", action: str = "") -> None:
+    """RULE-017：投递类失败必须第一时间上报主人，禁止静默吞掉。"""
+    try:
+        subprocess.run([sys.executable, str(REPO / "fail_report.py"),
+                        "--source", source, "--error", error,
+                        "--impact", impact, "--action", action],
+                       capture_output=True, text=True, timeout=90)
+    except Exception:
+        pass
+
+
+import contextlib
+import fcntl
+
+@contextlib.contextmanager
+def git_lock(timeout: float = 90.0):
+    """git 操作串行化：面板/cron/agent 三方同时跑 pull 会撞出
+    「Cannot rebase onto multiple branches」这类假故障。"""
+    lock_path = REPO / ".git" / "bridge.lock"
+    fh = open(lock_path, "a+")
+    deadline = time.time() + timeout
+    while True:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            break
+        except BlockingIOError:
+            if time.time() > deadline:
+                fh.close()
+                raise TimeoutError("等待 git 锁超时")
+            time.sleep(0.4)
+    try:
+        yield
+    finally:
+        fcntl.flock(fh, fcntl.LOCK_UN)
+        fh.close()
+
+
 def sync_pull(quiet: bool = False) -> None:
     try:
-        git("pull", "--rebase", "--autostash", "-q", check=False)
+        with git_lock():
+            r = git("pull", "--rebase", "--autostash", "-q", check=False)
+        if r.returncode != 0:
+            # 再试一次：并发/瞬时锁冲突多半一次就过
+            time.sleep(2)
+            with git_lock():
+                r = git("pull", "--rebase", "--autostash", "-q", check=False)
+        if r.returncode != 0:
+            err = (r.stderr or r.stdout or "unknown").strip()
+            if not quiet:
+                print(f"[warn] git pull 失败（继续用本地副本）: {err[:200]}", file=sys.stderr)
+            report_fail("bridge.py pull", err,
+                        impact="别的新消息拉不下来，你和房间会看到旧内容",
+                        action="手动 git -C ~/.hermes/collab/agent-bridge-private pull --rebase 看冲突")
     except Exception as e:
         if not quiet:
-            print(f"[warn] git pull 失败（继续用本地副本）: {e}", file=sys.stderr)
+            print(f"[warn] git pull 异常: {e}", file=sys.stderr)
+        report_fail("bridge.py pull(异常)", str(e),
+                    impact="消息同步中断", action="检查 git 仓库状态/网络")
 
 
 def sync_push(msg_id: str) -> bool:
@@ -100,11 +153,16 @@ def sync_push(msg_id: str) -> bool:
     except subprocess.CalledProcessError:
         return False
     try:
-        git("pull", "--rebase", "--autostash", "-q", check=False)
-        git("push", "-q")
+        with git_lock():
+            git("pull", "--rebase", "--autostash", "-q", check=False)
+            git("push", "-q")
         return True
     except subprocess.CalledProcessError as e:
-        print(f"[error] push 失败: {e.stderr or e}", file=sys.stderr)
+        err = (e.stderr or str(e)).strip()
+        print(f"[error] push 失败: {err}", file=sys.stderr)
+        report_fail("bridge.py push", err,
+                    impact="这条消息只存在本机，其他成员看不到",
+                    action="手动 git pull --rebase 后 git push（多半是远端有新提交）")
         return False
 
 
