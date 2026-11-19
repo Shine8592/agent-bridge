@@ -49,7 +49,10 @@ def load(repo: Path) -> list[dict]:
 
 
 def render(msgs: list[dict], repo: Path) -> str:
-    agents = {code_of(m.get("from")) for m in msgs} | {code_of(m.get("to")) for m in msgs}
+    def _recv(m) -> str:
+        t = str(m.get("to", "")).upper()
+        return "" if (t == "ALL" or "," in t) else code_of(m.get("to"))
+    agents = {code_of(m.get("from")) for m in msgs} | {_recv(m) for m in msgs}
     agents.discard("")
 
     projs: dict[str, dict] = {}
@@ -100,7 +103,9 @@ def render(msgs: list[dict], repo: Path) -> str:
             icon = "🟦" if who == "UK" else "🟩"
             kind = m.get("kind", "")
             badge = f" `{kind}`" if kind else ""
-            out.append(f"## {i}. {icon} {who} → {code_of(m.get('to','?'))}{badge}")
+            _to = str(m.get("to", "")).upper()
+            _to_txt = "全体" if _to == "ALL" else code_of(m.get("to", "?"))
+            out.append(f"## {i}. {icon} {who} → {_to_txt}{badge}")
             out.append("")
             out.append(f"**{m.get('subject','(无题)')}**")
             out.append("")

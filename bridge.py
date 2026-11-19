@@ -252,7 +252,8 @@ def cmd_list(a: argparse.Namespace) -> int:
             print(f"\n▸ {proj}")
             cur = proj
         flag = " " if m["id"] in read or code(m["from"]) == ME else "●"
-        print(f" {flag} {m['id']}  {code(m['from'])}→{code(m['to'])}  "
+        _to = "全体" if str(m.get("to","")).upper() == "ALL" else code(m["to"])
+        print(f" {flag} {m['id']}  {code(m['from'])}→{_to}  "
               f"[{m.get('kind','')}]「{m.get('subject','')}」")
     return 0
 
