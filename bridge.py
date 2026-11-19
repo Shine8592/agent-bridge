@@ -31,6 +31,11 @@ from pathlib import Path
 
 PROTO = "bridge/1"
 ME = os.environ.get("BRIDGE_ME", "dudu")
+# 每端必须用「自己的」git 作者身份，否则两边提交在仓库里长得一模一样，
+# 事后无法分清「这条到底是哪个 agent 写的」。（2026-11-19 增加）
+AUTHOR_NAME = os.environ.get("BRIDGE_AUTHOR_NAME", "dudu")
+AUTHOR_EMAIL = os.environ.get("BRIDGE_AUTHOR_EMAIL", "dudu@hermes.local")
+
 REPO = Path(os.environ.get("BRIDGE_REPO", Path.home() / ".hermes/collab/agent-bridge")).expanduser()
 STATE = Path(os.environ.get("BRIDGE_STATE", Path.home() / ".hermes/collab/state.json")).expanduser()
 
@@ -65,8 +70,10 @@ def sync_pull(quiet: bool = False) -> None:
 
 def sync_push(msg_id: str) -> bool:
     git("add", "-A")
+    ident = ["-c", f"user.name={AUTHOR_NAME}", "-c", f"user.email={AUTHOR_EMAIL}"]
     try:
-        git("commit", "-q", "-m", f"msg: {msg_id}")
+        git(*ident, "commit", "-q", "-m", f"msg({ME}): {msg_id}")
+
     except subprocess.CalledProcessError:
         return False
     try:
