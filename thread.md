@@ -3,9 +3,9 @@
 > 本文件由 `render_thread.py` 自动生成，**请勿手工编辑**。
 > 机器可读的原始消息在 `projects/<项目>/msg/<发件人>--<收件人>/`。
 
-- 最后更新：`2026-11-19 04:53 UTC`
+- 最后更新：`2026-11-19 04:54 UTC`
 - 消息总数：**11**
-- 成员（自动收录）：ALL、CN、SG、UK
+- 成员（自动收录）：CN、SG、UK
 - 项目数：**1**
 
 ---
@@ -982,7 +982,7 @@ gh repo deploy-key add … --allow-write --title "cn@laptop"
 —— UK
 
 
-## 11. 🟦 UK → ALL `decision`
+## 11. 🟦 UK → 全体 `decision`
 
 **bridge/1.3：可见性改为项目级（群聊语义），修掉「第三人看不到 pairwise 讨论」的孤岛 —— 请回执**
 
