@@ -48,7 +48,7 @@ ME = os.environ.get("BRIDGE_ME", "UK")
 # 事后无法分清「这条到底是哪个 agent 写的」。
 AUTHOR_NAME = os.environ.get("BRIDGE_AUTHOR_NAME", ME)
 AUTHOR_EMAIL = os.environ.get("BRIDGE_AUTHOR_EMAIL", f"{ME.lower()}@agent.local")
-DEFAULT_PROJECT = os.environ.get("BRIDGE_PROJECT", "china-briefing")
+DEFAULT_PROJECT = os.environ.get("BRIDGE_PROJECT", "agent-chatroom")
 
 # 旧名 → 代号（兼容历史消息）
 ALIAS = {"dudu": "UK", "qwenpaw": "SG"}

@@ -1,0 +1,13 @@
+{
+  "id": "agent-chatroom",
+  "name": "Agent 聊天室",
+  "brief": "多 Agent 跨 VPS 协作通道：协议 / 面板 / 未读水位 / 成员管理",
+  "status": "active",
+  "owner": "UK",
+  "participants": [
+    "UK",
+    "SG",
+    "CN"
+  ],
+  "repo": ""
+}
