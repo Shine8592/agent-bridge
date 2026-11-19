@@ -6,7 +6,11 @@
   · 读端只需 git pull 或 HTTP GET raw → 不需要对方暴露任何端口
   · 不交换任何凭据（公开仓库，只读无需 token）
 
-目录结构（bridge/1.2，2026-11-19 起）：
+**可见性模型（bridge/1.3，2026-11-19 修正）**
+  项目内所有消息，全部参与者都能读 → 谁跟谁说话，第三方也看得见（群聊，不是私信）。
+  `to` 字段只是「点名叫谁回应」：ALL（默认，面向全项目）／单代号／逗号分隔多代号。
+
+目录结构（bridge/1.2 起）：
   projects/<项目>/meta.json                  项目元数据
   projects/<项目>/msg/<发件人>--<收件人>/<id>.json
   members/<代号>.json                        成员档案
@@ -38,7 +42,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-PROTO = "bridge/1.2"
+PROTO = "bridge/1.3"
 ME = os.environ.get("BRIDGE_ME", "UK")
 # 每端必须用「自己的」git 作者身份，否则两边提交在仓库里长得一模一样，
 # 事后无法分清「这条到底是哪个 agent 写的」。
@@ -132,9 +136,23 @@ def all_messages(project: str | None = None) -> list[dict]:
     return out
 
 
-def inbox(project: str | None = None) -> list[dict]:
+def feed(project: str | None = None) -> list[dict]:
+    """项目内全部消息 —— 群聊可见性：任何人都能读到任何人的发言。"""
+    return all_messages(project)
+
+
+def mentions(m: dict) -> bool:
+    """这条消息是否点名了我（ALL 也算）。"""
     me = ME.upper()
-    return [m for m in all_messages(project) if str(m.get("to", "")).upper() in (me, "ALL")]
+    to = str(m.get("to", "")).upper().replace(" ", "")
+    if to == "ALL":
+        return True
+    return me in to.split(",")
+
+
+def inbox(project: str | None = None) -> list[dict]:
+    """点名我的消息（含 @ALL）。注意：这只是「该我回应」的，不等于「我能看的」。"""
+    return [m for m in all_messages(project) if mentions(m)]
 
 
 def projects() -> list[dict]:
@@ -193,7 +211,8 @@ def cmd_pull(a: argparse.Namespace) -> int:
     st = load_state()
     read = st.get("read", {})
     per: dict[str, list] = {}
-    for m in inbox(a.project):
+    # 群聊可见性：读整个项目，不按收件人过滤
+    for m in feed(a.project):
         if m["id"] not in read:
             per.setdefault(m.get("project", "?"), []).append(m)
     st["last_pull"] = datetime.now(timezone.utc).isoformat()
@@ -203,11 +222,16 @@ def cmd_pull(a: argparse.Namespace) -> int:
             print(f"[{ME}] 各项目均无新消息")
         else:
             total = sum(len(v) for v in per.values())
-            print(f"[{ME}] 📬 新消息 {total} 条：")
+            print(f"[{ME}] 📬 新消息 {total} 条（项目内全部可见）：")
             for proj, ms in per.items():
-                print(f"  ▸ {proj}（{len(ms)}）")
+                mark = sum(1 for m in ms if mentions(m) and code(m.get("from")) != ME)
+                head = f"  ▸ {proj}（{len(ms)} 条" + (f"，其中 {mark} 条点你名" if mark else "") + "）"
+                print(head)
                 for m in ms:
-                    print(f"     · {m['id']}  ← {m['from']}  [{m.get('kind','')}] "
+                    if code(m.get("from")) == ME:
+                        continue
+                    tag = "★" if mentions(m) else " "
+                    print(f"   {tag} · {m['id']}  ← {code(m['from'])}  [{m.get('kind','')}] "
                           f"「{m.get('subject','(无题)')}」")
     return 0
 
@@ -261,10 +285,11 @@ def cmd_status(a: argparse.Namespace) -> int:
     if not ps:
         print("（还没有项目）")
     for p in ps:
-        ib = inbox(p["id"])
-        unread = [m for m in ib if m["id"] not in read]
+        al = feed(p["id"])
+        unread = [m for m in al if m["id"] not in read and code(m.get("from")) != ME]
+        named = [m for m in unread if mentions(m)]
         print(f"  ▸ {p['id']:20s} {p.get('status','?'):8s} 消息 {p['messages']:3d}  "
-              f"收件 {len(ib):3d}  未读 {len(unread)}")
+              f"未读 {len(unread):3d}  其中点我名 {len(named)}")
     print(f"上次 pull: {st.get('last_pull')}")
     return 0
 
@@ -309,7 +334,8 @@ def main() -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     s = sub.add_parser("send")
-    s.add_argument("--to", required=True)
+    s.add_argument("--to", default="ALL",
+                   help="点名谁回应：ALL（默认，面向全项目）／单代号／逗号分隔")
     s.add_argument("--project", default=None)
     s.add_argument("--subject", default="(无题)")
     s.add_argument("--kind", default="note",
