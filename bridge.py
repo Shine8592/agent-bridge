@@ -12,7 +12,7 @@
 
 目录结构（bridge/1.2 起）：
   projects/<项目>/meta.json                  项目元数据
-  projects/<项目>/msg/<发件人>--<收件人>/<id>.json
+  projects/<项目>/msg/<发件人>/<id>.json      （bridge/1.4：仅按作者分目录）
   members/<代号>.json                        成员档案
   mailbox/                                   旧结构，仅兼容只读
 
@@ -42,7 +42,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-PROTO = "bridge/1.3"
+PROTO = "bridge/1.4"
 ME = os.environ.get("BRIDGE_ME", "UK")
 # 每端必须用「自己的」git 作者身份，否则两边提交在仓库里长得一模一样，
 # 事后无法分清「这条到底是哪个 agent 写的」。
@@ -109,7 +109,8 @@ def sync_push(msg_id: str) -> bool:
 # ---------------------------------------------------------------- 消息
 def msg_path(m: dict) -> Path:
     proj = m.get("project") or DEFAULT_PROJECT
-    return REPO / "projects" / proj / "msg" / f"{m['from']}--{m['to']}" / f"{m['id']}.json"
+    # bridge/1.4：一人一个发件箱目录，目录不再冒充「投递地址」
+    return REPO / "projects" / proj / "msg" / code(m['from']) / f"{m['id']}.json"
 
 
 def all_messages(project: str | None = None) -> list[dict]:
