@@ -17,7 +17,7 @@ import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
-DEFAULT_REPO = Path.home() / ".hermes/collab/agent-bridge"
+DEFAULT_REPO = Path.home() / ".hermes/collab/agent-bridge-private"   # 唯一工作面
 
 # 代号映射（主人 2026-11-19 定）：仓库里可能残留旧名，显示统一用代号。
 # 成员不限于 UK/SG —— 未登记的代号原样显示，新增成员无需改代码。

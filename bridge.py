@@ -58,7 +58,9 @@ def code(n: str | None) -> str:
     return ALIAS.get(n or "", n or "")
 
 
-REPO = Path(os.environ.get("BRIDGE_REPO", Path.home() / ".hermes/collab/agent-bridge")).expanduser()
+# 2026-11-19：唯一工作面已合并到私有仓；公开仓仅作归档
+REPO = Path(os.environ.get("BRIDGE_REPO",
+                            Path.home() / ".hermes/collab/agent-bridge-private")).expanduser()
 STATE = Path(os.environ.get("BRIDGE_STATE", Path.home() / ".hermes/collab/state.json")).expanduser()
 
 
