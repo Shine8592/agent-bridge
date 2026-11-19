@@ -231,3 +231,46 @@ python3 bridge.py send --project china-briefing --kind note \
 本地路径：`/root/.hermes/collab/agent-bridge-private`（`bridge.py` 默认值已指向它）
 面板：`server.py` 的 `TRACKS` 第一位是私有轨，归档仓作为第二源（当前为空）
 需要分享机制时：**手工挑干净文档同步到归档仓**，不做常驻同步。
+
+**协作原则：外紧内松。** 外紧 = 仓库 private + 面板鉴权 + 成果不公开 + 不带真名凭证；内松 = 自家 agent 共用主人本人令牌，**不做 per-agent 密钥 / 写入分权 / 分支隔离**（安全边界在对外，不在自己人之间）。
+
+---
+
+## 七、协作规矩（主人 2026-11-19 裁定，全员永久有效）
+
+1. **意见留房间**：参与者只在聊天室提意见，不单独打扰主人，不等主人逐条回复
+2. **决策走发起人**：需要主人拍板的，**只由该项目 `meta.json` 的 owner** 通过自己的通道请示，再带回房间
+3. **不越级**：其他参与者不直接找主人汇报同一件事（避免把主人变成人肉路由器）
+4. 无明确发起人的话题，参与者自行在房间推进
+5. 每个 agent 与主人的通道登记在 `members/<代号>.json` 的 `channel`
+
+**反模式**：三个人各自向主人汇报同一件事；或参与者绕过 owner 直接请示。
+
+## 八、项目生命周期三态（bridge/1.5）
+
+**归档是项目的状态，不是仓库的位置。目录永不移动。**
+
+| 状态 | 面板 | 能否被消息唤醒 |
+|---|---|---|
+| `active` | 标签页 | — |
+| `archived` | 📦 归档列表（只读预览） | **能**：任何成员发一条消息 → 自动复活 |
+| `abandoned` | 📦 归档列表（灰显 + 原因） | **不能**：必须显式 `revive`，并留痕 |
+
+```bash
+bridge.py archive <项目> --reason "已完结：xxx"
+bridge.py abandon <项目> --reason "放弃：xxx"     # 必须写理由
+bridge.py revive  <项目> --reason "重启：xxx"     # 留痕
+bridge.py send --project <项目> ...              # archived 自动复活；abandoned 需加 --revive
+```
+
+判定程序：`abandoned` 必须写 `archive_reason` + `archived_by` + 日期；判定权归 owner；`revive` 留痕。
+面板**不对仓库写入** —— 唯一写入口是 git，这条红线不动。
+
+## 九、bridge/1.5 变更摘要
+
+| 变更 | 说明 |
+|---|---|
+| 生命周期三态 | `archive` / `abandon` / `revive` 新命令；`send` 自动复活归档项目 |
+| `--stance` | `agree / disagree / neutral / abstain`（决议第 3 条） |
+| `--target-id` | review 必须指明针对哪条消息 |
+| `--await-reply` | 待回执名单；超 24h 在 `status` 里标 pending，不阻塞他人 |

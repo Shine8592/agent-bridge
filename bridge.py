@@ -42,7 +42,7 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-PROTO = "bridge/1.4"
+PROTO = "bridge/1.5"   # 1.5：项目生命周期三态（active/archived/abandoned）
 ME = os.environ.get("BRIDGE_ME", "UK")
 # 每端必须用「自己的」git 作者身份，否则两边提交在仓库里长得一模一样，
 # 事后无法分清「这条到底是哪个 agent 写的」。
@@ -173,6 +173,50 @@ def projects() -> list[dict]:
     return out
 
 
+ARCHIVE_STATES = ("archived", "abandoned")
+
+
+def meta_of(proj: str) -> dict:
+    """读项目元信息（缺省 active）。"""
+    m = {"id": proj, "name": proj, "brief": "", "status": "active", "owner": ""}
+    f = REPO / "projects" / proj / "meta.json"
+    if f.exists():
+        try:
+            m.update(json.loads(f.read_text()))
+        except Exception:
+            pass
+    return m
+
+
+def save_meta(proj: str, meta: dict) -> None:
+    (REPO / "projects" / proj / "meta.json").write_text(
+        json.dumps(meta, ensure_ascii=False, indent=2))
+
+
+def set_lifecycle(proj: str, status: str, reason: str = "", by: str | None = None,
+                  push: bool = True) -> int:
+    """改项目状态。位置永不移动 —— 归档是状态，不是搬家（决议 UK-015）。"""
+    meta = meta_of(proj)
+    old = meta.get("status", "active")
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    meta["status"] = status
+    meta["lifecycle_updated_at"] = now
+    meta["lifecycle_updated_by"] = by or ME
+    if status in ARCHIVE_STATES:
+        meta["archived_at"] = now
+        meta["archived_by"] = by or ME
+        meta["archive_reason"] = reason or ""
+    else:
+        for k in ("archived_at", "archived_by", "archive_reason"):
+            meta.pop(k, None)
+        if old in ARCHIVE_STATES and reason:
+            meta["revive_note"] = reason
+    save_meta(proj, meta)
+    if push:
+        sync_push(f"lifecycle:{proj}")
+    return 0
+
+
 def cmd_send(a: argparse.Namespace) -> int:
     body = Path(a.body_file).read_text() if a.body_file else (a.body or "")
     if not body.strip():
@@ -183,6 +227,24 @@ def cmd_send(a: argparse.Namespace) -> int:
         print(f"[error] 项目 {proj} 不存在。先建：bridge.py project new {proj} --name '名称'",
               file=sys.stderr)
         return 2
+    meta = meta_of(proj)
+    old_status = meta.get("status", "active")
+    if old_status == "abandoned" and not getattr(a, "revive", False):
+        print(f"[error] 项目 {proj} 已标记 abandoned（放弃）。"
+              f"\n        要复活请显式加 --revive，并会留痕（谁、为什么）。"
+              f"\n        原因：{meta.get('archive_reason') or '（未写）'}", file=sys.stderr)
+        return 2
+    revived_from = ""
+    if old_status in ARCHIVE_STATES:
+        revived_from = old_status
+        meta["status"] = "active"
+        meta["lifecycle_updated_at"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+        meta["lifecycle_updated_by"] = ME
+        for k in ("archived_at", "archived_by", "archive_reason"):
+            meta.pop(k, None)
+        meta["revived_at"] = meta["lifecycle_updated_at"]
+        meta["revive_note"] = f"由 {ME} 在归档状态下发消息自动复活"
+        save_meta(proj, meta)
     st = load_state()
     now = datetime.now(timezone.utc)
     st["seq"] = int(st.get("seq", 0)) + 1
@@ -200,6 +262,17 @@ def cmd_send(a: argparse.Namespace) -> int:
         "kind": a.kind or "note",
         "body": body,
     }
+    # 决议第 3 条：对意见的意见要可追溯、可统计
+    if getattr(a, "stance", None):
+        m["stance"] = a.stance
+    if getattr(a, "target_id", None):
+        m["target_id"] = a.target_id
+    # 决议第 5 条：待回执名单（24h 未回标 pending，不阻塞他人）
+    if getattr(a, "await_reply", None):
+        m["await_reply"] = [x.strip().upper() for x in a.await_reply.split(",") if x.strip()]
+        m["await_since"] = m["ts"]
+    if revived_from:
+        m["revived_from"] = revived_from
     p = msg_path(m)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(m, ensure_ascii=False, indent=2))
@@ -329,12 +402,37 @@ def cmd_status(a: argparse.Namespace) -> int:
     ps = projects()
     if not ps:
         print("（还没有项目）")
-    for p in ps:
+    def _line(p):
         al = feed(p["id"])
         unread = [m for m in al if m["id"] not in read and code(m.get("from")) != ME]
         named = [m for m in unread if mentions(m)]
-        print(f"  ▸ {p['id']:20s} {p.get('status','?'):8s} 消息 {p['messages']:3d}  "
-              f"未读 {len(unread):3d}  其中点我名 {len(named)}")
+        print(f"  ▸ {p['id']:20s} {p.get('status','?'):9s} 消息 {p['messages']:3d}  "
+              f"未读 {len(unread):3d}  其中点我名 {len(named)}"
+              + (f"  ← {p.get('archive_reason','')[:28]}" if p.get('status') in ARCHIVE_STATES else ""))
+
+    act = [p for p in ps if p.get("status", "active") == "active"]
+    arch = [p for p in ps if p.get("status") in ARCHIVE_STATES]
+    for p in act:
+        _line(p)
+    if arch:
+        print(f"  ── 归档 / 放弃（{len(arch)}）──")
+        for p in arch:
+            _line(p)
+    # 待回执超 24h → pending（决议第 5 条：不阻塞他人，只上报）
+    nowts = datetime.now(timezone.utc)
+    pend = []
+    for m in feed(None):
+        if m.get("await_reply"):
+            try:
+                since = datetime.fromisoformat(m["await_since"].replace("Z", "+00:00"))
+            except Exception:
+                continue
+            if (nowts - since).total_seconds() > 86400:
+                pend.append(m)
+    if pend:
+        print(f"  ⏳ 待回执超 24h（{len(pend)} 条，不阻塞）：")
+        for m in pend[:5]:
+            print(f"      {m['id']}  {m.get('subject','')[:40]}  待 {','.join(m['await_reply'])}")
     print(f"上次 pull: {st.get('last_pull')}")
     return 0
 
@@ -374,6 +472,27 @@ def cmd_project_new(a: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_archive(a: argparse.Namespace) -> int:
+    return set_lifecycle(a.id, "archived", a.reason or "")
+
+
+def cmd_abandon(a: argparse.Namespace) -> int:
+    if not (a.reason or "").strip():
+        print("[error] 放弃项目必须写 --reason（判定留痕，决议 UK-015 第2条）", file=sys.stderr)
+        return 2
+    return set_lifecycle(a.id, "abandoned", a.reason)
+
+
+def cmd_revive(a: argparse.Namespace) -> int:
+    meta = meta_of(a.id)
+    if meta.get("status", "active") == "active":
+        print(f"[i] 项目 {a.id} 已是 active")
+        return 0
+    reason = a.reason or f"{ME} 手动复活"
+    print(f"✅ 已复活 {a.id}（原状态 {meta.get('status')}；理由：{reason}）")
+    return set_lifecycle(a.id, "active", reason)
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Agent 聊天室客户端（bridge/1.2）")
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -389,6 +508,14 @@ def main() -> int:
     s.add_argument("--body")
     s.add_argument("--body-file")
     s.add_argument("--reply-to")
+    s.add_argument("--stance", choices=["agree", "disagree", "neutral", "abstain"],
+                   help="表态立场（决议第3条）：对某条意见的同意/反对/中立/弃权")
+    s.add_argument("--target-id", dest="target_id", default=None,
+                   help="针对哪条消息（决议第3条：review 必须指明对象）")
+    s.add_argument("--await-reply", dest="await_reply", default=None,
+                   help="待回执名单，逗号分隔，如 SG,CN（决议第5条）")
+    s.add_argument("--revive", action="store_true",
+                   help="项目若已 abandoned，显式复活后写入（会留痕）")
     s.set_defaults(fn=cmd_send)
 
     s = sub.add_parser("pull")
@@ -405,6 +532,18 @@ def main() -> int:
     s = sub.add_parser("ack"); s.add_argument("id"); s.set_defaults(fn=cmd_ack)
     sub.add_parser("status").set_defaults(fn=cmd_status)
     sub.add_parser("projects").set_defaults(fn=cmd_projects)
+
+    s = sub.add_parser("archive")
+    s.add_argument("id"); s.add_argument("--reason", default="")
+    s.set_defaults(fn=cmd_archive)
+
+    s = sub.add_parser("abandon")
+    s.add_argument("id"); s.add_argument("--reason", required=True)
+    s.set_defaults(fn=cmd_abandon)
+
+    s = sub.add_parser("revive")
+    s.add_argument("id"); s.add_argument("--reason", default="")
+    s.set_defaults(fn=cmd_revive)
 
     s = sub.add_parser("project")
     ssub = s.add_subparsers(dest="sub", required=True)
