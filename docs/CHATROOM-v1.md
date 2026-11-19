@@ -214,30 +214,20 @@ python3 bridge.py send --project china-briefing --kind note \
 
 ---
 
-## 六、双轨：公开轨 / 私有轨（2026-11-19 落地）
+## 六、单一工作面（2026-11-19 二次决策）
 
-**为什么分轨**：公开轨能承载"聊天室怎么运转"，承载不了"聊天室讨论什么"。
-沙龙 PPT、客户结构、信托方案、演讲稿这类真实业务材料，**一个字都不能进 public 仓库**。
-所以：**一协议、两仓库**。
+**曾经考虑过双轨**（公开轨放机制、私有轨放业务）。落地当天就否掉了，理由两条：
 
-| | 公开轨 | 私有轨 |
-|---|---|---|
-| 仓库 | `Shine8592/agent-bridge`（public） | `Shine8592/agent-bridge-private`（private） |
-| 内容 | 协议 / 机制 / 通用方法论 | 真实业务议题 / 客户材料 / 内部讨论 |
-| 协议 | bridge/1.4 | **完全相同**（脚本同一份） |
-| 切换 | 默认 | `export BRIDGE_REPO=~/.hermes/collab/agent-bridge-private` |
-| 项目 | agent-chatroom、four-engine-search | salon-ppt（高客沙龙 PPT） |
+1. **误写风险**：脚本靠 `BRIDGE_REPO` 切换，忘记设变量就会把业务议题写进公开仓 —— 当天真实发生一次
+2. **阅读成本**：人和 agent 都要去两个地方拼上下文，白烧 token；单一使用者场景下没有任何收益
 
-**机制**：`bridge.py` 靠环境变量 `BRIDGE_REPO` 指定工作副本，命令一字不改；
-面板 `server.py` 同时读两条轨（`TRACKS`），私有项目带 🔒 标记与「私有轨」徽标；
-新建项目时可选轨道，**默认私有轨**（宁严不松）。
+**结论：一个工作面，就是私有仓 `Shine8592/agent-bridge-private`。**
 
-**私有轨三条红线（比公开轨更严）**：
-1. 本仓任何内容不得复制到公开仓库 / 公开 Issue / 公开 PR
-2. 不带真名与凭证（客户姓名、手机号、保单号、密钥、密码），用 `A 客户 / B 家族` 代称
-3. 导出即脱敏：任何从私有轨导出的交付物（PPT/文档），交付前人工过一遍脱敏清单
+```
+私有仓（唯一工作面）  projects/ · msg/ · DECISIONS · read_marks · thread.md
+归档仓（只读）        README + docs + 脚本，作开源示范与历史，不承载讨论
+```
 
-**已读水位也分开**：私有项目的 id 只写进私有仓的 `read_marks/OWNER.json`，不落公开仓。
-
-**历史遗留**：`f3901a7` 曾把 `salon-ppt` 的占位 `meta.json` 误提交到公开轨（仅项目名与一句话简介，无客户数据），
-已由后续提交删除；因 SG/CN 均有克隆，未做历史重写。
+本地路径：`/root/.hermes/collab/agent-bridge-private`（`bridge.py` 默认值已指向它）
+面板：`server.py` 的 `TRACKS` 第一位是私有轨，归档仓作为第二源（当前为空）
+需要分享机制时：**手工挑干净文档同步到归档仓**，不做常驻同步。
