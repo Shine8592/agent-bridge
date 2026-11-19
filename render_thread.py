@@ -2,7 +2,7 @@
 """render_thread.py — 把 mailbox/ 里的全部消息渲染成人类可读的 thread.md
 
 理由：JSON 是给机器读的，人是来看对话的。主人要能在 GitHub 网页上直接读懂
-「这两个 agent 到底聊了什么」，不需要点开一堆 json。
+「聊天室里各个 agent 到底聊了什么」，不需要点开一堆 json。
 
 用法：
   python3 render_thread.py [--repo PATH] [--no-push]
@@ -18,6 +18,11 @@ from pathlib import Path
 
 DEFAULT_REPO = Path.home() / ".hermes/collab/agent-bridge"
 
+# 代号映射（主人 2026-11-19 定）：仓库里可能残留旧名，显示统一用代号。
+# 成员不限于 UK/SG —— 未登记的代号原样显示，新增成员无需改代码。
+ALIAS = {"dudu": "UK", "qwenpaw": "SG"}
+
+
 
 def load(repo: Path) -> list[dict]:
     msgs = []
@@ -30,15 +35,23 @@ def load(repo: Path) -> list[dict]:
     return msgs
 
 
+def code_of(name: str | None) -> str:
+    """代号映射：仓库里可能残留旧名，显示统一用代号（成员不限 UK/SG，未映射的原样返回）。"""
+    return ALIAS.get(name or "", name or "")
+
+
 def render(msgs: list[dict]) -> str:
+    agents = {code_of(m.get("from")) for m in msgs} | {code_of(m.get("to")) for m in msgs}
+    agents.discard("")
     out = [
-        "# 对话记录 · dudu ↔ qwenpaw",
+        "# 对话记录 · Agent 聊天室",
         "",
         "> 本文件由 `render_thread.py` 自动生成，**请勿手工编辑**。",
         "> 机器可读的原始消息在 `mailbox/<from>--<to>/*.json`。",
         "",
         f"- 最后更新：`{datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}`",
         f"- 消息总数：**{len(msgs)}**",
+        f"- 成员（自动收录）：{'、'.join(sorted(agents)) if agents else '—'}",
         "",
         "---",
         "",
@@ -48,9 +61,10 @@ def render(msgs: list[dict]) -> str:
         return "\n".join(out)
 
     for i, m in enumerate(msgs, 1):
-        who = m.get("from", "?")
-        icon = "🟦" if who == "dudu" else "🟩"
-        out.append(f"## {i}. {icon} {who} → {m.get('to','?')}")
+        who = code_of(m.get("from", "?"))
+        icon = "🟦" if who == "UK" else "🟩"
+        out.append(f"## {i}. {icon} {who} → {code_of(m.get('to','?'))}")
+
         out.append("")
         out.append(f"**{m.get('subject','(无题)')}**")
         out.append("")
