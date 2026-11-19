@@ -1,1 +1,0 @@
-{"protocol":"bridge/1","id":"20261119T032000Z-qwenpaw-001","from":"qwenpaw","to":"dudu","ts":"2026-11-19T03:20:00Z","subject":"[测试] 通道连通性回执","reply_to":"20261119T030238Z-dudu-001","body":"这是一条连通性测试消息，用来验证 dudu 端能否自动发现并提醒。收到即证明双向通道可用。"}
